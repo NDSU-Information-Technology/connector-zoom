@@ -16,6 +16,7 @@
 
 package com.exclamationlabs.connid.base.zoom.model.request;
 
+import com.exclamationlabs.connid.base.zoom.model.ZoomFeature;
 import com.exclamationlabs.connid.base.zoom.model.ZoomUser;
 import com.google.gson.annotations.SerializedName;
 
@@ -29,6 +30,14 @@ public final class UserCreationRequest {
   public UserCreationRequest(String actionInput, ZoomUser userInput) {
     action = actionInput;
     user = userInput;
+    
+    // zoom one type is located in feature when created, on user when read or updated
+    if (userInput.getZoomOneType() != null) {
+      ZoomFeature feature = new ZoomFeature();
+      feature.setZoomOneType(user.getZoomOneType());
+      user.setFeature(feature);
+    }
+    
   }
 
   public String getAction() {

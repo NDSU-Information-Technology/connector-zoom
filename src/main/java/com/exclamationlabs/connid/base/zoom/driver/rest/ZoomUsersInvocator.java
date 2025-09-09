@@ -126,7 +126,7 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
           throw new ConnectorException(e);
         }
       }
-      
+
       if (response.getResponseStatusCode() == 204) {
         ZoomUser current = getOne(driver, userId, null);
         // Update email if required

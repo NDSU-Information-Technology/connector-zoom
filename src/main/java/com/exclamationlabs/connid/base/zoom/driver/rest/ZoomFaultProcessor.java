@@ -111,6 +111,7 @@ public class ZoomFaultProcessor implements RestFaultProcessor {
         throw new InvalidAttributeValueException(
             "Validation Failed. " + faultData.getErrorDetails());
       case TOKEN_EXPIRED:
+      case INVALID_ACCESS_TOKEN:
         throw new DriverRenewableTokenExpiredException(
             String.valueOf(faultData.getCode()) + " " + faultData.getMessage());
     }

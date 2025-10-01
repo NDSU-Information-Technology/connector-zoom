@@ -28,4 +28,6 @@ public interface ErrorResponseCode {
   int GROUP_NOT_FOUND = 4130;
   int GROUP_NAME_ALREADY_EXISTS = 4132;
   int TOKEN_EXPIRED = 124;
+  // from a different part of the API than the 124 above
+  int INVALID_ACCESS_TOKEN = 401;
 }

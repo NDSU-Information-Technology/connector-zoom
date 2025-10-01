@@ -36,9 +36,14 @@ import org.identityconnectors.framework.common.exceptions.ConnectorException;
 
 public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser> {
   private static final Log LOG = Log.getLog(ZoomUsersInvocator.class);
+  
+  private static final boolean ZOOM_ONE_PHONE_PROVISIONING = true;
+  private static final long ZOOM_ONE_PHONE_COMPATIBLE_PLAN = 144115188075855872l;
 
   @Override
   public String create(ZoomDriver driver, ZoomUser zoomUser) throws ConnectorException {
+    // store zoom phone here, it might be blanked out if zoom one path is used
+    boolean zoomPhone = (zoomUser.getFeature() != null && zoomUser.getFeature().getZoomPhone() == Boolean.TRUE);
 
     ZoomUser user = null;
     String id = null;
@@ -82,6 +87,33 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
     if (id == null) {
       throw new ConnectorException("Response from user creation was invalid");
     }
+    
+    // invoke update as create doesn't do anything with phone
+    // can't "change" type and zoom one type in same request, and these would have been created correctly,
+    // so blank out for the send to modify
+    zoomUser.setType(null);
+    zoomUser.setZoomOneType(null);
+    // repopulate zoom phone info if appropriate
+    if (zoomPhone) {
+      zoomUser.setFeature(new ZoomFeature());
+      zoomUser.getFeature().setZoomPhone(zoomPhone);
+      // since this was a create, this probably null
+      if (zoomUser.getOutboundAdd() == null) {
+        zoomUser.setOutboundAdd(new ZoomPhoneUserProfile());
+      }
+      
+      // since this was a create, the values are all adds
+      if (zoomUser.getPhoneProfile() != null) {
+        zoomUser.getOutboundAdd().setPlans(zoomUser.getPhoneProfile().getPlans());
+        zoomUser.getOutboundAdd().setPhones(zoomUser.getPhoneProfile().getPhones());
+      }
+      
+    } else {
+      zoomUser.setFeature(null);
+    }
+
+    update(driver, id, zoomUser);
+    
     return id;
   }
 
@@ -98,13 +130,24 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
    */
   @Override
   public void update(ZoomDriver driver, String userId, ZoomUser user) throws ConnectorException {
-
+    // tracks if zoom one phone path has to be followed later
+    boolean provisionZoomOnePhone = false;
     boolean deactivateOnly = StringUtils.equalsIgnoreCase(user.getStatus(), "inactive");
     updateUserStatus(driver, user.getStatus(), userId);
 
     // If this Update request was an attempt to deactivate a user, do not invoke any other update
     // attempts
     if (!deactivateOnly) {
+      // TODO need config flag here for people not doing what we are doing
+      // if following Zoom One phone path, unset feature here and flag for it to be followed later
+      // TODO completely unsure as to path if phone is granted by default for the Zoom One plan, but user doesn't have it yet
+      if (ZOOM_ONE_PHONE_PROVISIONING && user.getFeature() != null && user.getFeature().getZoomPhone() == Boolean.TRUE) {
+        // can't set phone feature under zoom one path, but it is good way to control flow
+        // and it is a really good way to deprovision everything, so use it as a proxy for phone service
+        user.setFeature(null);
+        provisionZoomOnePhone = true;
+        Logger.info(this, "Will delay provision Zoom One Phone");
+      }
 
       RestRequest req =
           new RestRequest.Builder<>(Void.class)
@@ -145,6 +188,15 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
           updateGroupAssignments(driver, userId, user.getGroupsToAdd(), user.getGroupsToRemove());
         }
         current = getOne(driver, userId, null);
+
+        // if zoom one phone is the path, and they have the correct license provisioned
+        if (provisionZoomOnePhone && current.getZoomOneType() == ZOOM_ONE_PHONE_COMPATIBLE_PLAN) {
+          // this sets the Zoom Phone feature as a side effect
+          assignZoomPhoneForZoomOne(driver, userId);
+          current = getOne(driver, userId, null);
+        }
+        
+        // either zoom one phone has been activated above or the non-zoom one path was followed for this to be true
         if (current.getFeature() != null
             && current.getFeature().getZoomPhone() != null
             && current.getFeature().getZoomPhone()) {
@@ -521,6 +573,20 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
               response.getResponseStatusCode(), userId));
     }
     return result;
+  }
+  
+
+  private boolean assignZoomPhoneForZoomOne(ZoomDriver driver, String userId) {
+    String body = String.format("{\"batch_type\": \"assign_pending_user\", \"user_ids\": [ \"%s\" ]}", userId);
+    
+    RestRequest req = new RestRequest.Builder<>(Void.class).withPut().withRequestBody(body).withRequestUri("/phone/users/batch").build(); 
+    RestResponseData<Void> response = driver.executeRequest(req);
+    if (response.getResponseStatusCode() == 200 || response.getResponseStatusCode() == 204) {
+      return true;
+    } else {
+      Logger.warn(this, String.format("Status %d: Failed to activate Zoom One Phone for user %s",  response.getResponseStatusCode(), userId));
+    }
+    return false;
   }
 
   private void updateUserStatus(ZoomDriver zoomDriver, String desiredStatus, String userId) {

@@ -201,17 +201,20 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
             && current.getFeature().getZoomPhone() != null
             && current.getFeature().getZoomPhone()) {
           // Update User Profile if needed
+          boolean updateProfile = false;
           String siteId = null;
           if (user.getSite() != null
               && user.getSite().getId() != null
               && user.getSite().getId().trim().length() > 0) {
             siteId = user.getSite().getId();
+            updateProfile = true;
           } else if (user.getSite() != null
               && user.getSite().getName() != null
               && user.getSite().getName().trim().length() > 0) {
             ZoomPhoneSite aSite = getZoomPhoneSiteFromName(driver, user.getSite().getName());
             if (aSite != null) {
               siteId = aSite.getId();
+              updateProfile = true;
             }
           } else if (current.getSite() != null
               && current.getSite().getId() != null
@@ -224,7 +227,18 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
             }
           }
           String extension = user.getPhoneProfile().getExtension();
-          if (siteId != null && extension != null) {
+          
+          if (extension != null) {
+            updateProfile = true;
+          } else {
+            extension = current.getPhoneProfile().getExtension();
+            // both values are required for the update path, so bail on update if extension is null
+            if (extension == null) {
+              updateProfile = false;
+            }
+          }
+          
+          if (updateProfile) {
             updatePhoneUserProfile(driver, userId, current.getPhoneProfile(), extension, siteId);
           }
           // Remove Calling plans

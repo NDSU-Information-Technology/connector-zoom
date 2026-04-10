@@ -119,6 +119,7 @@ public class ZoomFaultProcessor implements RestFaultProcessor {
             "Validation Failed. " + faultData.getErrorDetails());
       case TOKEN_EXPIRED:
       case INVALID_ACCESS_TOKEN:
+      case ACCESS_TOKEN_EXPIRED:
         throw new DriverRenewableTokenExpiredException(
             String.valueOf(faultData.getCode()) + " " + faultData.getMessage());
     }

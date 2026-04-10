@@ -39,6 +39,9 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
   
   private static final boolean ZOOM_ONE_PHONE_PROVISIONING = true;
   private static final long ZOOM_ONE_PHONE_COMPATIBLE_PLAN = 144115188075855872l;
+  
+  private Set<ZoomPhoneSite> phoneSites;
+  private long phoneSiteTime;
 
   @Override
   public String create(ZoomDriver driver, ZoomUser zoomUser) throws ConnectorException {
@@ -529,16 +532,18 @@ public class ZoomUsersInvocator implements DriverInvocator<ZoomDriver, ZoomUser>
     return users;
   }
 
-  private Set<ZoomPhoneSite> getPhoneSiteList(ZoomDriver driver) {
-    String uri = "/phone/sites";
-    RestRequest req =
-        new RestRequest.Builder<>(ListSitesResponse.class).withGet().withRequestUri(uri).build();
+  private synchronized Set<ZoomPhoneSite> getPhoneSiteList(ZoomDriver driver) {
+    if (phoneSites == null || System.currentTimeMillis() - phoneSiteTime > 300_000) {
+      String uri = "/phone/sites";
+      RestRequest req =
+          new RestRequest.Builder<>(ListSitesResponse.class).withGet().withRequestUri(uri).build();
 
-    RestResponseData<ListSitesResponse> response = driver.executeRequest(req);
+      RestResponseData<ListSitesResponse> response = driver.executeRequest(req);
+      phoneSites = response.getResponseObject().getSites();
+      phoneSiteTime = System.currentTimeMillis();
+    }
 
-    Set<ZoomPhoneSite> sites = response.getResponseObject().getSites();
-
-    return sites;
+    return phoneSites;
   }
 
   private ZoomPhoneSite getZoomPhoneSiteFromId(ZoomDriver driver, String siteId) {

@@ -29,6 +29,7 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.util.EntityUtils;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
+import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 
 public class ZoomFaultProcessor implements RestFaultProcessor {
@@ -39,6 +40,7 @@ public class ZoomFaultProcessor implements RestFaultProcessor {
     return instance;
   }
 
+  @Override
   public void process(HttpResponse httpResponse, GsonBuilder gsonBuilder) {
     String rawResponse;
     try {
@@ -51,6 +53,11 @@ public class ZoomFaultProcessor implements RestFaultProcessor {
         // received non-JSON error response from Zoom unable to process
         String errorMessage = "Unable to parse Zoom response, not valid JSON: ";
         Logger.info(this, String.format("%s %s", errorMessage, rawResponse));
+        // 500+ are all proxy errors, and this system likes to throw 502s and 503s
+        if (httpResponse.getStatusLine().getStatusCode() > 499) {
+          throw new ConnectorIOException(errorMessage + rawResponse);
+        }
+        
         throw new ConnectorException(errorMessage + rawResponse);
       }
 
